@@ -37,7 +37,7 @@ rem 结束上次可能残留的实例
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq '一键测速IP.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 ping -n 2 127.0.0.1 >nul
 echo   局域网访问用本机 IP 加端口 8765，口令见同目录 token.txt
-start "" "%EXE%" --host 0.0.0.0 --idle-exit 10
+start "" "%EXE%" --host 0.0.0.0 --idle-exit 20
 exit /b 0
 
 :run
@@ -49,4 +49,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Pr
 ping -n 2 127.0.0.1 >nul
 
 rem 关掉网页约 120 秒无请求后进程自动退出
-start "" "%PY%" "%APP%" --host 0.0.0.0 --idle-exit 10
+start "" "%PY%" "%APP%" --host 0.0.0.0 --idle-exit 20

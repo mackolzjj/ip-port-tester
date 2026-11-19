@@ -396,6 +396,30 @@ setInterval(() => {
   $('#clock').textContent = new Date().toLocaleTimeString('zh-CN', {hour12:false});
 }, 1000);
 poll();
+
+// ── 存活探测 ───────────────────────────────────────────────
+// 1) WebSocket：标签页关闭 / 浏览器被杀时 TCP 立刻断，服务端 2.5 秒后退出
+window._ws = null;
+(function keepWs(){
+  try{
+    const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    window._ws = new WebSocket(proto + location.host + '/ws');
+    window._ws.onclose = () => { window._ws = null; setTimeout(keepWs, 3000); };  // 页面还开着才会走到这里
+    window._ws.onerror = () => {};
+  }catch(e){}
+})();
+
+// 2) 心跳：页面可见时每 8 秒打一次，让服务端知道窗口还在
+setInterval(() => {
+  if (document.hidden) return;
+  fetch('api/ping', {cache:'no-store'}).catch(() => {});
+}, 8000);
+
+// 3) 关页面时顺手通知一次，让退出更快
+window.addEventListener('pagehide', () => {
+  try { navigator.sendBeacon('api/bye', '1'); } catch (e) {}
+  try { if (window._ws) window._ws.close(); } catch (e) {}
+});
 </script>
 </body>
 </html>

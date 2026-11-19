@@ -49,7 +49,10 @@ IDLE_EXIT = 0            # >0：这么多秒没有请求就退出（兜底）
 BYE_GRACE = 3.0          # 收到「页面关闭」通知后的宽限期：期间有新请求=刷新，取消退出
 _LAST_REQ = [time.time()]
 _BYE_AT = [0.0]          # >0 表示已收到 bye
-VERSION = "4.1"
+_WS_CLIENTS = [0]        # 当前连着几个页面
+_WS_GONE_AT = [0.0]      # 最后一个页面断开的时间
+_WS_LOCK = threading.Lock()
+VERSION = "4.2"
 def _app_dir() -> Path:
     """冻结成 exe 后 __file__ 指向临时解包目录，必须用 exe 所在目录，
     否则输出文件和缓存会被写进 %TEMP% 并在退出时消失。"""
@@ -621,6 +624,53 @@ def retest_job(node: Node, cfg: dict):
 
 
 # ────────────────────────────── HTTP ──────────────────────────────
+WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+
+def ws_accept_key(key: str) -> str:
+    import hashlib
+    return base64.b64encode(hashlib.sha1((key + WS_GUID).encode()).digest()).decode()
+
+
+def ws_read_frame(sock) -> tuple[int, bytes]:
+    """读一帧：返回 (opcode, payload)。对端关闭返回 (-1, b"")。"""
+    head = sock.recv(2)
+    if len(head) < 2:
+        return -1, b""
+    opcode = head[0] & 0x0F
+    masked = head[1] & 0x80
+    ln = head[1] & 0x7F
+    if ln == 126:
+        ln = int.from_bytes(sock.recv(2), "big")
+    elif ln == 127:
+        ln = int.from_bytes(sock.recv(8), "big")
+    mask = sock.recv(4) if masked else b""
+    data = b""
+    while len(data) < ln:
+        chunk = sock.recv(min(ln - len(data), 8192))
+        if not chunk:
+            return -1, b""
+        data += chunk
+    if masked:
+        data = bytes(b ^ mask[i % 4] for i, b in enumerate(data))
+    return opcode, data
+
+
+def ws_write(sock, opcode: int, payload: bytes = b""):
+    head = bytes([0x80 | opcode])
+    n = len(payload)
+    if n < 126:
+        head += bytes([n])
+    elif n < 65536:
+        head += bytes([126]) + n.to_bytes(2, "big")
+    else:
+        head += bytes([127]) + n.to_bytes(8, "big")
+    try:
+        sock.sendall(head + payload)
+    except OSError:
+        pass
+
+
 class Server(ThreadingHTTPServer):
     """Windows 上 allow_reuse_address=1 会允许两个进程绑同一端口（127.0.0.1 与 0.0.0.0 可以共存），
     表现就是「改了代码却测到老进程」。这里关掉，端口被占就直接报错退出。"""
@@ -630,6 +680,7 @@ class Server(ThreadingHTTPServer):
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "IPPortTester/" + VERSION
+    protocol_version = "HTTP/1.1"      # WebSocket 要求 1.1，且所有响应都带 Content-Length
 
     def log_message(self, fmt, *args):
         pass
@@ -672,6 +723,38 @@ class Handler(BaseHTTPRequestHandler):
         self._send(401, b"", "text/plain; charset=utf-8",
                    {"WWW-Authenticate": 'Basic realm="IP Port Tester"'})
 
+    def _ws_serve(self):
+        """极简 WebSocket：只用来感知「页面还在不在」。
+        浏览器进程一死 / 标签页一关，TCP 立刻断，服务端当场知道。"""
+        key = self.headers.get("Sec-WebSocket-Key", "")
+        if not key or self.headers.get("Upgrade", "").lower() != "websocket":
+            return self._send(400, b"bad websocket request", "text/plain; charset=utf-8")
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", ws_accept_key(key))
+        self.end_headers()
+        sock = self.connection
+        with _WS_LOCK:
+            _WS_CLIENTS[0] += 1
+            _WS_GONE_AT[0] = 0.0
+        try:
+            sock.settimeout(None)
+            while True:
+                opcode, payload = ws_read_frame(sock)
+                if opcode < 0 or opcode == 0x8:      # EOF / close
+                    break
+                if opcode == 0x9:                    # ping → pong
+                    ws_write(sock, 0xA, payload)
+        except OSError:
+            pass
+        finally:
+            with _WS_LOCK:
+                _WS_CLIENTS[0] = max(0, _WS_CLIENTS[0] - 1)
+                if _WS_CLIENTS[0] == 0:
+                    _WS_GONE_AT[0] = time.time()
+            self.close_connection = True
+
     def _same_origin_ok(self) -> bool:
         """挡住别的网站偷偷 POST 到 127.0.0.1:8765（CSRF / DNS rebinding）。
         直接访问、curl、局域网访问都不带 Origin 或带同源 Origin，不受影响。"""
@@ -713,6 +796,8 @@ class Handler(BaseHTTPRequestHandler):
             ctype = "text/plain; charset=utf-8" if name.endswith(".txt") else "text/csv; charset=utf-8"
             return self._send(200, f.read_bytes(), ctype,
                               {"Content-Disposition": f'attachment; filename="{name}"'})
+        if path == "/ws":
+            return self._ws_serve()
         if path == "/api/bye":
             if not STATE.running:
                 _BYE_AT[0] = time.time()
@@ -880,8 +965,8 @@ def main() -> int:
     ap.add_argument("--ports", dest="ports", default="",
                     help="端口集合：每个 IP 展开成多个端口，如 443,8443,8000-8010")
     ap.add_argument("--no-browser", action="store_true")
-    ap.add_argument("--idle-exit", type=int, default=0,
-                    help="秒：这么久没有请求就自动退出（0=不退出）")
+    ap.add_argument("--idle-exit", type=int, default=None,
+                    help="秒：这么久没有请求就自动退出（默认：本机模式 60，服务模式 0=不退出）")
     ap.add_argument("--version", action="version", version=f"ip_tester {VERSION}")
     args = ap.parse_args()
 
@@ -924,6 +1009,10 @@ def main() -> int:
     print(f"  输出: {DEFAULT_OUT}")
     print("  Ctrl+C 退出")
     global IDLE_EXIT
+    if args.idle_exit is None:
+        # 本机模式给个兜底：浏览器被强杀时页面来不及发消息，只能靠超时退出；
+        # 服务模式（有口令）不退，避免把常驻服务关掉。
+        args.idle_exit = 0 if AUTH_TOKEN else 60
     IDLE_EXIT = max(0, args.idle_exit)
 
     def _watch():
@@ -934,6 +1023,12 @@ def main() -> int:
                 _BYE_AT[0] = 0.0
                 continue
             now = time.time()
+            with _WS_LOCK:
+                clients = _WS_CLIENTS[0]
+                gone_at = _WS_GONE_AT[0]
+            if clients == 0 and gone_at and now - gone_at >= 2.5:
+                print("\n页面已断开（WebSocket 关闭），退出")
+                __import__("os")._exit(0)
             if _BYE_AT[0] and now - _BYE_AT[0] >= BYE_GRACE and _LAST_REQ[0] <= _BYE_AT[0]:
                 print("\n页面已关闭，退出")
                 __import__("os")._exit(0)
@@ -1352,6 +1447,30 @@ setInterval(() => {
   $('#clock').textContent = new Date().toLocaleTimeString('zh-CN', {hour12:false});
 }, 1000);
 poll();
+
+// ── 存活探测 ───────────────────────────────────────────────
+// 1) WebSocket：标签页关闭 / 浏览器被杀时 TCP 立刻断，服务端 2.5 秒后退出
+window._ws = null;
+(function keepWs(){
+  try{
+    const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    window._ws = new WebSocket(proto + location.host + '/ws');
+    window._ws.onclose = () => { window._ws = null; setTimeout(keepWs, 3000); };  // 页面还开着才会走到这里
+    window._ws.onerror = () => {};
+  }catch(e){}
+})();
+
+// 2) 心跳：页面可见时每 8 秒打一次，让服务端知道窗口还在
+setInterval(() => {
+  if (document.hidden) return;
+  fetch('api/ping', {cache:'no-store'}).catch(() => {});
+}, 8000);
+
+// 3) 关页面时顺手通知一次，让退出更快
+window.addEventListener('pagehide', () => {
+  try { navigator.sendBeacon('api/bye', '1'); } catch (e) {}
+  try { if (window._ws) window._ws.close(); } catch (e) {}
+});
 </script>
 </body>
 </html>

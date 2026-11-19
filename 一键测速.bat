@@ -36,7 +36,7 @@ cd /d "%~dp0"
 rem 结束上次可能残留的实例
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq '一键测速IP.exe' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 ping -n 2 127.0.0.1 >nul
-start "" "%EXE%" --idle-exit 10
+start "" "%EXE%" --idle-exit 20
 exit /b 0
 
 :run
@@ -48,4 +48,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Pr
 ping -n 2 127.0.0.1 >nul
 
 rem 关掉网页约 120 秒无请求后进程自动退出
-start "" "%PY%" "%APP%" --idle-exit 120
+start "" "%PY%" "%APP%" --idle-exit 20

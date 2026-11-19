@@ -1,5 +1,9 @@
 # IP 端口测速器
 
+[![Release](https://github.com/mackolzjj/ip-port-tester/actions/workflows/release.yml/badge.svg)](https://github.com/mackolzjj/ip-port-tester/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/mackolzjj/ip-port-tester)](https://github.com/mackolzjj/ip-port-tester/releases)
+[![License](https://img.shields.io/github/license/mackolzjj/ip-port-tester)](LICENSE)
+
 对一批 `IP:端口` 做**纯 TCP 握手**探测，筛出真正连得上、延迟低、抖动小的节点，按耗时排序导出可直接贴回配置的列表。
 
 不 TLS 握手、不发 HTTP 请求、不解析任何应用层协议——它衡量的是网络层可达性，所以结果和你后面跑什么协议无关。
@@ -121,6 +125,23 @@ python -m PyInstaller --onefile --noconsole --name IPPortTester \
 - 仅监听 `127.0.0.1` 时不启用认证
 - 监听 `0.0.0.0` 时自动生成 16 位口令，存于同目录 `token.txt`（也可用环境变量 `IPTESTER_TOKEN` 覆盖）
 - 校验 `Origin` 与 `Host` 一致，拒绝其它网站的跨站请求（防 CSRF / DNS rebinding）
+
+## 发版
+
+推送 `v*` 开头的标签即可，GitHub Actions 会自动打包并发布：
+
+```bash
+git tag v4.2 && git push origin v4.2
+```
+
+CI 流程（`.github/workflows/release.yml`）：
+
+1. `windows-latest` + Python 3.12 + PyInstaller 打包单文件 exe
+2. **冒烟测试**：启动 exe → 请求 `/api/version` → 失败则整轮中止
+3. 生成 `CHECKSUM.txt`（大小 + SHA256）
+4. 上传 workflow artifact，并在标签触发时发布到 Release
+
+也可以在 Actions 页面手动 `workflow_dispatch` 只构建、不发布。
 
 ## License
 

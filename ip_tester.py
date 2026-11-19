@@ -49,7 +49,7 @@ IDLE_EXIT = 0            # >0：这么多秒没有请求就退出（兜底）
 BYE_GRACE = 3.0          # 收到「页面关闭」通知后的宽限期：期间有新请求=刷新，取消退出
 _LAST_REQ = [time.time()]
 _BYE_AT = [0.0]          # >0 表示已收到 bye
-VERSION = "4.0"
+VERSION = "4.1"
 def _app_dir() -> Path:
     """冻结成 exe 后 __file__ 指向临时解包目录，必须用 exe 所在目录，
     否则输出文件和缓存会被写进 %TEMP% 并在退出时消失。"""

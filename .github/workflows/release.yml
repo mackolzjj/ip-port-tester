@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要发布到哪个 tag（留空则用当前分支最新提交，仅构建不发布）"
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 安装 PyInstaller
+        run: pip install --disable-pip-version-check pyinstaller
+
+      - name: 语法检查
+        run: python -m py_compile ip_tester.py
+
+      - name: 打包单文件 exe
+        run: >
+          python -m PyInstaller
+          --onefile --noconsole --clean --noconfirm
+          --name IPPortTester
+          --distpath dist --workpath build --specpath build
+          ip_tester.py
+
+      - name: 冒烟测试（启动 → 查版本 → 退出）
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\dist\IPPortTester.exe -ArgumentList "--port","8799","--no-browser" -PassThru
+          Start-Sleep -Seconds 8
+          try {
+            $r = Invoke-RestMethod -Uri "http://127.0.0.1:8799/api/version" -TimeoutSec 5
+            Write-Host "版本: $($r.version)"
+            if (-not $r.version) { throw "接口无响应" }
+          } finally {
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: 生成校验信息
+        shell: pwsh
+        run: |
+          $f = "dist/IPPortTester.exe"
+          $size = (Get-Item $f).Length
+          $sha = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
+          Write-Host "size=$size sha256=$sha"
+          "IPPortTester.exe  $size 字节" | Out-File -Encoding utf8 dist/CHECKSUM.txt
+          "SHA256  $sha" | Out-File -Encoding utf8 -Append dist/CHECKSUM.txt
+          Get-Content dist/CHECKSUM.txt
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: IPPortTester-exe
+          path: |
+            dist/IPPortTester.exe
+            dist/CHECKSUM.txt
+          if-no-files-found: error
+
+      - name: 发布到 Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/IPPortTester.exe
+            dist/CHECKSUM.txt
+          generate_release_notes: true
+          fail_on_unmatched_files: true

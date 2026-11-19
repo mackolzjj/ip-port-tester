@@ -67,13 +67,27 @@ python ip_tester.py --cli ip.txt    # 命令行模式，直接出文件
 
 ## 部署到服务器
 
-放到 VPS / 内网服务器上常驻，见 **[docs/DEPLOY.md](docs/DEPLOY.md)**（systemd、Docker、Nginx 反代 + HTTPS）。
+放到 VPS / 内网服务器上常驻，完整说明见 **[docs/DEPLOY.md](docs/DEPLOY.md)**。
 
-要点：必须加 `--keep-alive`，否则最后一个页面关掉服务会自己退出。
+**Docker（最省事）**
+
+```bash
+git clone https://github.com/mackolzjj/ip-port-tester.git
+cd ip-port-tester
+cp .env.example .env          # 改掉里面的 IPTESTER_TOKEN
+mkdir -p output
+docker compose up -d --build
+```
+
+浏览器打开 `http://服务器IP:8765`，用户名随意，口令填 `.env` 里那个。
+
+**systemd（不用 Docker）**
 
 ```bash
 python3 ip_tester.py --host 0.0.0.0 --port 8765 --keep-alive --no-browser
 ```
+
+要点：必须加 `--keep-alive`，否则最后一个页面关掉服务会自己退出。`deploy/iptester.service` 是现成的单元文件。
 
 ## 输入格式
 

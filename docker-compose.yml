@@ -1,0 +1,32 @@
+services:
+  iptester:
+    build: .
+    image: ip-port-tester:latest
+    container_name: iptester
+    restart: unless-stopped
+
+    ports:
+      # 宿主机端口:容器端口
+      - "8765:8765"
+
+    environment:
+      # 口令从同目录 .env 读取（cp .env.example .env 后改掉）
+      IPTESTER_TOKEN: ${IPTESTER_TOKEN:?请先在 .env 里设置 IPTESTER_TOKEN}
+
+    volumes:
+      # 测速结果落到宿主机，容器重建不丢
+      - ./output:/app/output
+
+    healthcheck:
+      # 只做 TCP 连通检查（带口令时 /api/* 需要认证，用 HTTP 探针会误判）
+      test: ["CMD", "python3", "-c", "import socket;socket.create_connection(('127.0.0.1',8765),3).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

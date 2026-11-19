@@ -9,3 +9,4 @@ last_result.json
 uploaded_ip.txt
 runtime/
 *.exe
+.env

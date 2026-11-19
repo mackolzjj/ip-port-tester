@@ -52,7 +52,7 @@ _BYE_AT = [0.0]          # >0 表示已收到 bye
 _WS_CLIENTS = [0]        # 当前连着几个页面
 _WS_GONE_AT = [0.0]      # 最后一个页面断开的时间
 _WS_LOCK = threading.Lock()
-VERSION = "4.2"
+VERSION = "4.3"
 def _app_dir() -> Path:
     """冻结成 exe 后 __file__ 指向临时解包目录，必须用 exe 所在目录，
     否则输出文件和缓存会被写进 %TEMP% 并在退出时消失。"""
@@ -965,6 +965,8 @@ def main() -> int:
     ap.add_argument("--ports", dest="ports", default="",
                     help="端口集合：每个 IP 展开成多个端口，如 443,8443,8000-8010")
     ap.add_argument("--no-browser", action="store_true")
+    ap.add_argument("--keep-alive", action="store_true",
+                    help="常驻模式：不管有没有人开着页面都不退出（部署到服务器时用）")
     ap.add_argument("--idle-exit", type=int, default=None,
                     help="秒：这么久没有请求就自动退出（默认：本机模式 60，服务模式 0=不退出）")
     ap.add_argument("--version", action="version", version=f"ip_tester {VERSION}")
@@ -1009,6 +1011,8 @@ def main() -> int:
     print(f"  输出: {DEFAULT_OUT}")
     print("  Ctrl+C 退出")
     global IDLE_EXIT
+    if args.keep_alive:
+        args.idle_exit = 0
     if args.idle_exit is None:
         # 本机模式给个兜底：浏览器被强杀时页面来不及发消息，只能靠超时退出；
         # 服务模式（有口令）不退，避免把常驻服务关掉。
@@ -1026,7 +1030,7 @@ def main() -> int:
             with _WS_LOCK:
                 clients = _WS_CLIENTS[0]
                 gone_at = _WS_GONE_AT[0]
-            if clients == 0 and gone_at and now - gone_at >= 2.5:
+            if IDLE_EXIT > 0 and clients == 0 and gone_at and now - gone_at >= 2.5:
                 print("\n页面已断开（WebSocket 关闭），退出")
                 __import__("os")._exit(0)
             if _BYE_AT[0] and now - _BYE_AT[0] >= BYE_GRACE and _LAST_REQ[0] <= _BYE_AT[0]:

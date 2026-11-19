@@ -1,0 +1,38 @@
+[Unit]
+Description=IP Port Tester (TCP 握手测速)
+Documentation=https://github.com/mackolzjj/ip-port-tester
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=iptester
+Group=iptester
+WorkingDirectory=/opt/iptester
+
+# --keep-alive：没人开着页面也不退出（服务器上必须）
+ExecStart=/usr/bin/python3 /opt/iptester/ip_tester.py --host 0.0.0.0 --port 8765 --keep-alive --no-browser
+
+# 口令：不要写在这里，放到 /etc/iptester.env（chmod 600）
+EnvironmentFile=-/etc/iptester.env
+
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+# 沙箱（程序只需要写 output/ 和当前目录）
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/iptester
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=iptester
+
+[Install]
+WantedBy=multi-user.target

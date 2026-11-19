@@ -65,6 +65,16 @@ python ip_tester.py --cli ip.txt    # 命令行模式，直接出文件
 | `--history N` | 保留最近 N 份带时间戳的历史副本（0=只留最新） |
 | `--idle-exit` | 秒：这么久没有请求就退出（0=不退出） |
 
+## 部署到服务器
+
+放到 VPS / 内网服务器上常驻，见 **[docs/DEPLOY.md](docs/DEPLOY.md)**（systemd、Docker、Nginx 反代 + HTTPS）。
+
+要点：必须加 `--keep-alive`，否则最后一个页面关掉服务会自己退出。
+
+```bash
+python3 ip_tester.py --host 0.0.0.0 --port 8765 --keep-alive --no-browser
+```
+
 ## 输入格式
 
 ```

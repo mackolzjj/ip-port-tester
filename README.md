@@ -8,7 +8,14 @@
 
 不 TLS 握手、不发 HTTP 请求、不解析任何应用层协议——它衡量的是网络层可达性，所以结果和你后面跑什么协议无关。
 
-![深色界面](docs/screenshot-dark.png)
+![深色界面](https://cdn.jsdelivr.net/gh/mackolzjj/ip-port-tester@main/docs/screenshot-dark.jpg)
+
+<details>
+<summary>浅色主题</summary>
+
+![浅色界面](https://cdn.jsdelivr.net/gh/mackolzjj/ip-port-tester@main/docs/screenshot-light.jpg)
+
+</details>
 
 ## 特性
 

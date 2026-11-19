@@ -5,6 +5,10 @@ services:
     container_name: iptester
     restart: unless-stopped
 
+    labels:
+      # 有 watchtower 的机器上别让它尝试更新这个本地构建的镜像
+      com.centurylinklabs.watchtower.enable: "false"
+
     ports:
       # 宿主机端口:容器端口
       - "8765:8765"

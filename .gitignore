@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+build_tmp/
+dist/
+*.spec
+output/
+token.txt
+last_result.json
+uploaded_ip.txt
+runtime/
+*.exe

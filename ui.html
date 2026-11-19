@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IP 端口测速器</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#12161f; --panel2:#171c27; --line:#232a38;
+    --txt:#e7ebf3; --dim:#8b93a7; --accent:#5b8cff; --ok:#34d399; --warn:#fbbf24; --bad:#f87171;
+  }
+  :root[data-theme="light"]{
+    --bg:#f5f7fb; --panel:#ffffff; --panel2:#eef2f8; --line:#dde3ec;
+    --txt:#18202e; --dim:#5b6676; --accent:#2563eb;
+    --ok:#0b8a4b; --warn:#a16207; --bad:#c62828;
+  }
+  :root[data-theme="light"] .toast{background:#fff;border-color:var(--line);color:var(--txt)}
+  :root[data-theme="light"] tbody tr:hover{background:rgba(0,0,0,.03)}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:14px/1.55 -apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 18px 60px}
+  header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+  h1{font-size:19px;margin:0;font-weight:650;letter-spacing:.2px}
+  .tag{font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
+  .spacer{flex:1}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+  .card h2{font-size:13px;margin:0 0 10px;color:var(--dim);font-weight:600;letter-spacing:.3px}
+  textarea{width:100%;min-height:150px;resize:vertical;background:var(--panel2);color:var(--txt);
+           border:1px solid var(--line);border-radius:10px;padding:12px;font:13px/1.6 ui-monospace,Consolas,monospace}
+  .drop{border:1px dashed var(--line);border-radius:10px;padding:10px;color:var(--dim);font-size:12px;
+        display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  .drop.hot{border-color:var(--accent);color:var(--txt)}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--dim)}
+  input[type=number],input[type=text]{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+        border-radius:8px;padding:7px 9px;width:110px;font-size:13px}
+  button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:9px;
+         padding:8px 14px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:#39445c}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#08101f;font-weight:650}
+  button.danger{color:var(--bad);border-color:#41232a}
+  button.factive{border-color:var(--accent);color:var(--accent)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .bar{height:8px;background:var(--panel2);border-radius:999px;overflow:hidden;margin:10px 0 8px}
+  .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#5b8cff,#34d399);transition:width .2s}
+  .meta{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--dim)}
+  .env{border-radius:10px;padding:10px 12px;font-size:12.5px;margin-top:10px;border:1px solid}
+  .env.ok{background:rgba(52,211,153,.08);border-color:rgba(52,211,153,.35)}
+  .env.proxy{background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.4)}
+  .env.checking,.env.skipped,.env.unknown{background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.35)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--dim);font-weight:600;font-size:12px;position:sticky;top:0;background:var(--panel);z-index:2}
+  tbody tr:hover{background:rgba(255,255,255,.025)}
+  .pill{border-radius:999px;padding:1px 8px;font-size:11px;border:1px solid}
+  .pill.open{color:var(--ok);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.08)}
+  .pill.flaky{color:var(--warn);border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.08)}
+  .pill.closed{color:var(--bad);border-color:rgba(248,113,113,.4);background:rgba(248,113,113,.08)}
+  .mono{font-family:ui-monospace,Consolas,monospace}
+  .lat{display:flex;align-items:center;gap:8px}
+  .lat>i{height:6px;border-radius:3px;background:var(--accent);display:block;min-width:3px}
+  .tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+  .tools input[type=text]{width:200px}
+  .muted{color:var(--dim)}
+  .tiny{font-size:11.5px;color:var(--dim)}
+  .scroll{max-height:520px;overflow:auto;border-radius:10px;border:1px solid var(--line)}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#1c2230;
+         border:1px solid var(--line);border-radius:10px;padding:9px 16px;font-size:13px;opacity:0;
+         transition:.2s;pointer-events:none}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>IP 端口测速器</h1>
+    <span class="tag" id="ver">v4.0</span>
+    <span class="tag">纯 TCP 握手 · 不 TLS · 不发 HTTP</span>
+    <div class="spacer"></div>
+    <button id="theme" title="切换深色/浅色" style="padding:5px 11px">🌙</button>
+    <span class="tag mono" id="clock"></span>
+  </header>
+
+  <div class="card">
+    <h2>输入</h2>
+    <textarea id="input" spellcheck="false" placeholder="每行一个，格式：IP:端口#地区#原始延迟
+1.2.3.4:443#HK#120
+5.6.7.8:8443
+9.10.11.12
+192.168.1.1-20#LAN          ← IP 段
+10.0.0.0/28                 ← CIDR"></textarea>
+    <div class="drop" id="drop">
+      <span>拖入 .txt 文件，或</span>
+      <button id="pick">选择 TXT</button>
+      <button id="pickCsv">导入 CSV</button>
+      <input type="file" id="file" accept=".txt,.csv,text/plain" hidden>
+      <input type="file" id="csvFile" accept=".csv,text/csv" hidden>
+      <span class="tiny" id="fname"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>参数</h2>
+    <div class="row">
+      <label>并发 <input type="number" id="workers" value="32" min="1" max="256"></label>
+      <label>单次超时(秒) <input type="number" id="timeout" value="2" step="0.2" min="0.2" max="30"></label>
+      <label>每节点次数 <input type="number" id="repeat" value="3" min="1" max="10"></label>
+      <label>强制端口 <input type="text" id="port_override" placeholder="留空=用行内"></label>
+      <label>端口集合 <input type="text" id="ports" placeholder="443,8443,2053" style="width:150px"></label>
+      <label>保留历史 <input type="number" id="history" value="0" min="0" max="200" style="width:80px" title="0=只留最新一份，N=保留最近 N 份带时间戳的副本"></label>
+      <label style="flex-direction:row;align-items:center;gap:6px;color:var(--txt)">
+        <input type="checkbox" id="retry" checked style="width:15px;height:15px"> 失败自动重试
+      </label>
+      <label>对照端口 <input type="number" id="control_port" value="45123" min="0" max="65535"></label>
+      <div class="spacer"></div>
+      <button class="primary" id="start">开始测速</button>
+      <button class="danger" id="stop" disabled>停止</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>进度</h2>
+    <div class="bar"><i id="pbar"></i></div>
+    <div class="meta">
+      <span id="msg">就绪</span>
+      <span>完成 <b id="done">0</b>/<b id="total">0</b></span>
+      <span>耗时 <b id="elapsed">0s</b></span>
+      <span>可用 <b id="okc" style="color:var(--ok)">0</b></span>
+      <span>可疑 <b id="susc" style="color:var(--warn)">0</b></span>
+      <span>新增 <b id="newc" style="color:var(--ok)">0</b></span>
+      <span>丢失 <b id="lostc" style="color:var(--bad)">0</b></span>
+    </div>
+    <div class="env skipped" id="env">未开始</div>
+  </div>
+
+  <div class="card">
+    <h2>结果</h2>
+    <div class="tools">
+      <button data-f="all" class="factive">全部</button>
+      <button data-f="ok">可用</button>
+      <button data-f="suspect">可疑</button>
+      <button data-f="fail">失效</button>
+      <button data-f="new">新可用</button>
+      <button data-f="lost">新失效</button>
+      <input type="text" id="q" placeholder="搜索 IP / 地区">
+      <select id="sort" style="background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:13px">
+        <option value="metric">按延迟</option>
+        <option value="jitter">按抖动</option>
+        <option value="rate">按成功率</option>
+      </select>
+      <div class="spacer"></div>
+      <button id="copy">复制可用列表</button>
+      <button id="dl-txt">下载 txt</button>
+      <button id="dl-csv">下载 csv</button>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th>#</th><th>节点</th><th>地区</th><th>握手</th><th>抖动</th><th>成功率</th><th>状态</th><th>对比</th><th></th>
+        </tr></thead>
+        <tbody id="rows"><tr><td colspan="9" class="muted" style="padding:24px;text-align:center">还没有结果</td></tr></tbody>
+      </table>
+    </div>
+    <div class="tiny" id="outfiles" style="margin-top:10px"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+let state = {results: [], running: false};
+let filter = 'all', query = '', sortBy = 'metric';
+let timer = null;
+
+const fmt = ms => (ms === null || ms === undefined) ? '—' : ms + ' ms';
+const esc = s => String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function toast(t){
+  const el = $('#toast'); el.textContent = t; el.classList.add('show');
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 1800);
+}
+
+function cfg(){
+  return {
+    workers: +$('#workers').value,
+    timeout: +$('#timeout').value,
+    repeat: +$('#repeat').value,
+    port_override: $('#port_override').value.trim(),
+    control_port: +$('#control_port').value,
+    ports: $('#ports').value.trim(),
+    history: +$('#history').value,
+    retry: $('#retry').checked ? 1 : 0
+  };
+}
+
+function jitterColor(r){
+  if (!r.ok || r.jitter === null || r.jitter === undefined) return 'var(--dim)';
+  const base = r.connect_ms || 1;
+  const ratio = r.jitter / base;
+  if (ratio > 1) return 'var(--bad)';
+  if (ratio > 0.4) return 'var(--warn)';
+  return '';
+}
+
+function render(){
+  const sorter = sortBy === 'jitter'
+    ? (a, b) => ((a.jitter === null || a.jitter === undefined) ? 1e9 : a.jitter) - ((b.jitter === null || b.jitter === undefined) ? 1e9 : b.jitter)
+    : sortBy === 'rate'
+      ? (a, b) => (b.success_rate - a.success_rate) || (a.metric - b.metric)
+      : (a, b) => (a.metric - b.metric);
+  const rs = state.results.filter(r => {
+    if (filter === 'ok' && !r.ok) return false;
+    if (filter === 'fail' && r.ok) return false;
+    if (filter === 'suspect' && !r.suspect) return false;
+    if (filter === 'new' && r.trend !== 'new') return false;
+    if (filter === 'lost' && r.trend !== 'lost') return false;
+    if (query && !(r.raw + ' ' + (r.region || '')).toLowerCase().includes(query.toLowerCase())) return false;
+    return true;
+  }).sort(sorter);
+  $('#okc').textContent = state.results.filter(r => r.ok).length;
+  $('#susc').textContent = state.results.filter(r => r.suspect).length;
+  $('#newc').textContent = state.results.filter(r => r.trend === 'new').length;
+  $('#lostc').textContent = state.results.filter(r => r.trend === 'lost').length;
+  $('#done').textContent = state.done || 0;
+  $('#total').textContent = state.total || 0;
+  $('#pbar').style.width = state.total ? Math.round((state.done || 0) / state.total * 100) + '%' : '0';
+
+  if (!rs.length){
+    const msg = state.results.length ? '当前筛选无结果' : '还没有结果';
+    $('#rows').innerHTML = '<tr><td colspan="9" class="muted" style="padding:24px;text-align:center">' + msg + '</td></tr>';
+    return;
+  }
+  const max = Math.max.apply(null, rs.map(r => r.metric < 99999 ? r.metric : 0).concat([1]));
+  $('#rows').innerHTML = rs.map((r, i) => {
+    const pct = r.metric < 99999 ? Math.max(4, Math.round(r.metric / max * 100)) : 0;
+    const cls = r.status === 'open' ? 'open' : r.status === 'flaky' ? 'flaky' : 'closed';
+    const label = ({open:'可用', flaky:'不稳', closed:'失效'})[r.status] || r.status;
+    let d = '<span class="muted">—</span>';
+    if (r.delta !== null && r.delta !== undefined){
+      const c = r.delta > 0 ? 'var(--bad)' : 'var(--ok)';
+      d = '<span style="color:' + c + '">' + (r.delta > 0 ? '+' : '') + r.delta + ' ms</span>';
+    }
+    const sus = r.suspect ? '<span class="pill flaky" style="margin-left:6px">可疑</span>' : '';
+    const trend = r.trend === 'new' ? '<span class="pill open" style="margin-left:6px">新增</span>'
+      : r.trend === 'lost' ? '<span class="pill closed" style="margin-left:6px">丢失</span>' : '';
+    const rt = r.retried ? '<span class="tiny" style="margin-left:6px;color:var(--dim)">重试过</span>' : '';
+    const err = r.error ? '<span class="tiny" style="margin-left:6px">' + esc(r.error) + '</span>' : '';
+    return '<tr>' +
+      '<td class="muted">' + (i + 1) + '</td>' +
+      '<td class="mono">' + esc(r.raw) + sus + '</td>' +
+      '<td class="muted">' + esc(r.region || '—') + '</td>' +
+      '<td><div class="lat"><i style="width:' + pct + '%;background:' + (r.ok ? 'var(--accent)' : 'var(--bad)') + '"></i>' + fmt(r.connect_ms) + '</div></td>' +
+      '<td class="mono" style="color:' + jitterColor(r) + '">' + (r.jitter === null || r.jitter === undefined ? '—' : '±' + r.jitter + ' ms') + '</td>' +
+      '<td class="mono">' + r.success_rate + '% <span class="muted">(' + r.ok_count + '/' + r.tries + ')</span></td>' +
+      '<td><span class="pill ' + cls + '">' + label + '</span>' + sus + trend + rt + err + '</td>' +
+      '<td>' + d + '</td>' +
+      '<td><button data-retest="' + esc(r.raw) + '" style="padding:3px 9px;font-size:12px">复测</button></td>' +
+    '</tr>';
+  }).join('');
+  document.querySelectorAll('[data-retest]').forEach(b => {
+    b.onclick = () => retest(b.getAttribute('data-retest'));
+  });
+}
+
+function renderEnv(env){
+  if (!env || !env.trust) return;
+  const el = $('#env');
+  el.className = 'env ' + env.trust;
+  const icon = env.trust === 'ok' ? '✅' : env.trust === 'proxy' ? '⚠️' : '⏳';
+  el.textContent = icon + ' ' + (env.note || '');
+}
+
+function renderFiles(f){
+  const el = $('#outfiles');
+  if (!f || (!f.outdir && !f.ok_count)){ el.textContent = ''; return; }
+  el.innerHTML = '输出目录 <span class="mono">' + esc(f.outdir || '') + '</span> · 可用 ' +
+    f.ok_count + ' · 失效 ' + f.fail_count;
+}
+
+async function poll(){
+  try{
+    const r = await fetch('api/state', {cache:'no-store'});
+    if (!r.ok) return;
+    const s = await r.json();
+    state = s;
+    $('#msg').textContent = s.message || '';
+    $('#elapsed').textContent = (s.elapsed || 0) + 's';
+    $('#start').disabled = !!s.running;
+    $('#stop').disabled = !s.running;
+    renderEnv(s.env); renderFiles(s.files); render();
+    if (!s.running && timer){ clearInterval(timer); timer = null; }
+  }catch(e){}
+}
+
+async function start(){
+  const text = $('#input').value.trim();
+  if (!text){ toast('先粘贴 IP 列表，或拖入 txt'); return; }
+  $('#start').disabled = true;
+  const r = await fetch('api/start', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({text: text, cfg: cfg()})
+  });
+  const j = await r.json().catch(function(){ return {}; });
+  if (!r.ok || j.error){ toast(j.error || '启动失败'); $('#start').disabled = false; return; }
+  state = {results: [], running: true, done: 0, total: j.nodes};
+  render();
+  if (!timer) timer = setInterval(poll, 400);
+}
+
+async function retest(raw){
+  const r = await fetch('api/retest', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({raw: raw, cfg: cfg()})
+  });
+  const j = await r.json().catch(function(){ return {}; });
+  if (!r.ok || j.error){ toast(j.error || '复测失败'); return; }
+  if (!timer) timer = setInterval(poll, 400);
+}
+
+$('#start').onclick = start;
+$('#stop').onclick = () => fetch('api/stop', {method:'POST'});
+// 主题：跟随 localStorage，默认深色
+(function initTheme(){
+  const saved = localStorage.getItem('ipt-theme');
+  if (saved) document.documentElement.dataset.theme = saved;
+  const btn = $('#theme');
+  const sync = () => { btn.textContent = document.documentElement.dataset.theme === 'light' ? '☀️' : '🌙'; };
+  btn.onclick = () => {
+    const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem('ipt-theme', next);
+    sync();
+  };
+  sync();
+})();
+
+// 导入上次导出的 CSV：取第一列 node，填回输入框继续测
+$('#pickCsv').onclick = () => $('#csvFile').click();
+$('#csvFile').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    const lines = String(rd.result).split(/\r?\n/);
+    const out = [];
+    for (const line of lines){
+      if (!line.trim()) continue;
+      const cell = (line.split(',')[0] || '').replace(/^"|"$/g, '').trim();
+      if (!cell || /^node$/i.test(cell)) continue;   // 跳过表头
+      out.push(cell);
+    }
+    $('#input').value = out.join('\n');
+    $('#fname').textContent = f.name + '（' + out.length + ' 行）';
+    toast('已导入 ' + out.length + ' 条节点');
+  };
+  rd.readAsText(f, 'utf-8');
+};
+
+$('#pick').onclick = () => $('#file').click();
+$('#file').onchange = e => { const f = e.target.files[0]; if (f) readFile(f); };
+$('#drop').ondragover = e => { e.preventDefault(); $('#drop').classList.add('hot'); };
+$('#drop').ondragleave = () => $('#drop').classList.remove('hot');
+$('#drop').ondrop = e => {
+  e.preventDefault(); $('#drop').classList.remove('hot');
+  const f = e.dataTransfer.files[0]; if (f) readFile(f);
+};
+function readFile(f){
+  if (f.size > 2 * 1024 * 1024){ toast('文件超过 2 MB'); return; }
+  const rd = new FileReader();
+  rd.onload = () => { $('#input').value = rd.result; $('#fname').textContent = f.name; toast('已载入 ' + f.name); };
+  rd.readAsText(f, 'utf-8');
+}
+
+document.querySelectorAll('.tools button[data-f]').forEach(b => {
+  b.onclick = () => {
+    filter = b.getAttribute('data-f');
+    document.querySelectorAll('.tools button[data-f]').forEach(x => x.classList.remove('factive'));
+    b.classList.add('factive'); render();
+  };
+});
+$('#q').oninput = e => { query = e.target.value; render(); };
+$('#sort').onchange = e => { sortBy = e.target.value; render(); };
+
+$('#copy').onclick = async () => {
+  const ok = state.results.filter(r => r.ok)
+    .sort((a, b) => a.metric - b.metric).map(r => r.raw).join('\n');
+  if (!ok){ toast('没有可用节点'); return; }
+  try{ await navigator.clipboard.writeText(ok); toast('已复制 ' + ok.split('\n').length + ' 条'); }
+  catch(e){ toast('剪贴板被拒绝，请用下载 txt'); }
+};
+$('#dl-txt').onclick = () => { location.href = 'api/download?name=ip_speed.txt'; };
+$('#dl-csv').onclick = () => { location.href = 'api/download?name=ip_speed_detail.csv'; };
+
+setInterval(() => {
+  $('#clock').textContent = new Date().toLocaleTimeString('zh-CN', {hour12:false});
+}, 1000);
+poll();
+</script>
+</body>
+</html>

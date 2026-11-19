@@ -52,7 +52,7 @@ _BYE_AT = [0.0]          # >0 表示已收到 bye
 _WS_CLIENTS = [0]        # 当前连着几个页面
 _WS_GONE_AT = [0.0]      # 最后一个页面断开的时间
 _WS_LOCK = threading.Lock()
-VERSION = "4.3"
+VERSION = "4.4"
 def _app_dir() -> Path:
     """冻结成 exe 后 __file__ 指向临时解包目录，必须用 exe 所在目录，
     否则输出文件和缓存会被写进 %TEMP% 并在退出时消失。"""
@@ -965,6 +965,8 @@ def main() -> int:
     ap.add_argument("--ports", dest="ports", default="",
                     help="端口集合：每个 IP 展开成多个端口，如 443,8443,8000-8010")
     ap.add_argument("--no-browser", action="store_true")
+    ap.add_argument("--no-auth", action="store_true",
+                    help="关闭口令认证（仅在完全可信的内网使用）")
     ap.add_argument("--keep-alive", action="store_true",
                     help="常驻模式：不管有没有人开着页面都不退出（部署到服务器时用）")
     ap.add_argument("--idle-exit", type=int, default=None,
@@ -980,7 +982,10 @@ def main() -> int:
     host = args.host or env_host or ("0.0.0.0" if AUTH_TOKEN else "127.0.0.1")
     args.host = host
     lan = host not in ("127.0.0.1", "localhost", "::1")
-    AUTH_TOKEN, token_note = resolve_token(lan)
+    if getattr(args, "no_auth", False):
+        AUTH_TOKEN, token_note = "", "已用 --no-auth 关闭认证"
+    else:
+        AUTH_TOKEN, token_note = resolve_token(lan)
 
     if args.cli:
         return cli_main(args.cli, args.workers, args.timeout, args.repeat,
@@ -1004,7 +1009,12 @@ def main() -> int:
     url = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '::') else args.host}:{args.port}/"
     print(f"IP 端口测速器 v{VERSION}")
     print(f"  地址: {url}")
-    print(f"  认证: {'Basic（用户名任意，口令见下）' if AUTH_TOKEN else '关闭（仅本机）'}")
+    if AUTH_TOKEN:
+        print("  认证: Basic（用户名任意，口令见下）")
+    elif getattr(args, "no_auth", False):
+        print("  认证: 已关闭（--no-auth）← 任何能访问本端口的人都能使用，只适合可信内网")
+    else:
+        print("  认证: 关闭（仅本机回环）")
     if AUTH_TOKEN:
         print(f"  口令: {AUTH_TOKEN}   ← {token_note}")
         print(f"  访问: http://<本机IP>:{args.port}/  浏览器会弹登录框，用户名随便填")

@@ -74,6 +74,23 @@ cd /opt/iptester && sudo -u iptester git pull
 sudo systemctl restart iptester
 ```
 
+### 内网免认证
+
+只在家里 / 办公室内网用，嫌登录框麻烦：
+
+```ini
+ExecStart=/usr/bin/python3 /opt/iptester/ip_tester.py --host 0.0.0.0 --port 8765 --keep-alive --no-auth --no-browser
+```
+
+Docker 里追加一个 command 即可（ENTRYPOINT 已带其余参数）：
+
+```yaml
+    command: ["--no-auth"]
+```
+
+> `--no-auth` 意味着任何能连到这个端口的人都能用，也能借它测任意目标的端口。
+> 只在可信内网开；公网或半开放网络请保留口令。
+
 ---
 
 ## 方式二：Docker
